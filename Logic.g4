@@ -1,4 +1,4 @@
-grammar logic;
+grammar Logic;
 // Parser Rules
 parse
  : expression EOF
@@ -7,14 +7,13 @@ parse
 expression
  : LPAREN expression RPAREN                       #parenExpression
  | NOT expression                                 #notExpression
- | left=expression op=comparator right=expression #comparatorExpression
  | left=expression op=binary right=expression     #binaryExpression
  | bool                                           #boolExpression
  | IDENTIFIER                                     #identifierExpression
  ;
 
 binary
- : AND | OR
+ : AND | OR | NAND
  ;
 
 bool
@@ -22,8 +21,6 @@ bool
  ;
 
 // Lexer Rules
-WORD  : [a-z] ;
-
 // logical constants
 TRUE: 'true';
 FALSE: 'false';
@@ -31,6 +28,7 @@ FALSE: 'false';
 // logical connectives
 AND : 'and' ;
 OR  : 'or' ;
+NAND : 'nand';
 NOT : 'not';
 
 IDENTIFIER : [a-z];

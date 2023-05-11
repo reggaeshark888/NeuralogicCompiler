@@ -16,8 +16,8 @@ public class logicParser extends Parser {
 	protected static final PredictionContextCache _sharedContextCache =
 		new PredictionContextCache();
 	public static final int
-		WORD=1, TRUE=2, FALSE=3, AND=4, OR=5, NOT=6, PROPOSITION=7, LPAREN=8, 
-		RPAREN=9, WS=10, IDENTIFIER=11, DECIMAL=12;
+		TRUE=1, FALSE=2, AND=3, OR=4, NOT=5, IDENTIFIER=6, LPAREN=7, RPAREN=8, 
+		WS=9;
 	public static final int
 		RULE_parse = 0, RULE_expression = 1, RULE_binary = 2, RULE_bool = 3;
 	private static String[] makeRuleNames() {
@@ -29,15 +29,14 @@ public class logicParser extends Parser {
 
 	private static String[] makeLiteralNames() {
 		return new String[] {
-			null, null, "'true'", "'false'", "'and'", "'or'", "'not'", null, "'('", 
-			"')'"
+			null, "'true'", "'false'", "'and'", "'or'", "'not'", null, "'('", "')'"
 		};
 	}
 	private static final String[] _LITERAL_NAMES = makeLiteralNames();
 	private static String[] makeSymbolicNames() {
 		return new String[] {
-			null, "WORD", "TRUE", "FALSE", "AND", "OR", "NOT", "PROPOSITION", "LPAREN", 
-			"RPAREN", "WS", "IDENTIFIER", "DECIMAL"
+			null, "TRUE", "FALSE", "AND", "OR", "NOT", "IDENTIFIER", "LPAREN", "RPAREN", 
+			"WS"
 		};
 	}
 	private static final String[] _SYMBOLIC_NAMES = makeSymbolicNames();
@@ -151,10 +150,6 @@ public class logicParser extends Parser {
 		}
 		public BinaryExpressionContext(ExpressionContext ctx) { copyFrom(ctx); }
 	}
-	public static class DecimalExpressionContext extends ExpressionContext {
-		public TerminalNode DECIMAL() { return getToken(logicParser.DECIMAL, 0); }
-		public DecimalExpressionContext(ExpressionContext ctx) { copyFrom(ctx); }
-	}
 	public static class BoolExpressionContext extends ExpressionContext {
 		public BoolContext bool() {
 			return getRuleContext(BoolContext.class,0);
@@ -196,7 +191,7 @@ public class logicParser extends Parser {
 			int _alt;
 			enterOuterAlt(_localctx, 1);
 			{
-			setState(21);
+			setState(20);
 			_errHandler.sync(this);
 			switch (_input.LA(1)) {
 			case LPAREN:
@@ -221,7 +216,7 @@ public class logicParser extends Parser {
 				setState(16);
 				match(NOT);
 				setState(17);
-				expression(5);
+				expression(4);
 				}
 				break;
 			case TRUE:
@@ -243,20 +238,11 @@ public class logicParser extends Parser {
 				match(IDENTIFIER);
 				}
 				break;
-			case DECIMAL:
-				{
-				_localctx = new DecimalExpressionContext(_localctx);
-				_ctx = _localctx;
-				_prevctx = _localctx;
-				setState(20);
-				match(DECIMAL);
-				}
-				break;
 			default:
 				throw new NoViableAltException(this);
 			}
 			_ctx.stop = _input.LT(-1);
-			setState(29);
+			setState(28);
 			_errHandler.sync(this);
 			_alt = getInterpreter().adaptivePredict(_input,1,_ctx);
 			while ( _alt!=2 && _alt!=org.antlr.v4.runtime.atn.ATN.INVALID_ALT_NUMBER ) {
@@ -268,16 +254,16 @@ public class logicParser extends Parser {
 					_localctx = new BinaryExpressionContext(new ExpressionContext(_parentctx, _parentState));
 					((BinaryExpressionContext)_localctx).left = _prevctx;
 					pushNewRecursionContext(_localctx, _startState, RULE_expression);
+					setState(22);
+					if (!(precpred(_ctx, 3))) throw new FailedPredicateException(this, "precpred(_ctx, 3)");
 					setState(23);
-					if (!(precpred(_ctx, 4))) throw new FailedPredicateException(this, "precpred(_ctx, 4)");
-					setState(24);
 					((BinaryExpressionContext)_localctx).op = binary();
-					setState(25);
-					((BinaryExpressionContext)_localctx).right = expression(5);
+					setState(24);
+					((BinaryExpressionContext)_localctx).right = expression(4);
 					}
 					} 
 				}
-				setState(31);
+				setState(30);
 				_errHandler.sync(this);
 				_alt = getInterpreter().adaptivePredict(_input,1,_ctx);
 			}
@@ -310,7 +296,7 @@ public class logicParser extends Parser {
 		try {
 			enterOuterAlt(_localctx, 1);
 			{
-			setState(32);
+			setState(31);
 			_la = _input.LA(1);
 			if ( !(_la==AND || _la==OR) ) {
 			_errHandler.recoverInline(this);
@@ -349,7 +335,7 @@ public class logicParser extends Parser {
 		try {
 			enterOuterAlt(_localctx, 1);
 			{
-			setState(34);
+			setState(33);
 			_la = _input.LA(1);
 			if ( !(_la==TRUE || _la==FALSE) ) {
 			_errHandler.recoverInline(this);
@@ -382,23 +368,23 @@ public class logicParser extends Parser {
 	private boolean expression_sempred(ExpressionContext _localctx, int predIndex) {
 		switch (predIndex) {
 		case 0:
-			return precpred(_ctx, 4);
+			return precpred(_ctx, 3);
 		}
 		return true;
 	}
 
 	public static final String _serializedATN =
-		"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\16\'\4\2\t\2\4\3"+
-		"\t\3\4\4\t\4\4\5\t\5\3\2\3\2\3\2\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3"+
-		"\3\5\3\30\n\3\3\3\3\3\3\3\3\3\7\3\36\n\3\f\3\16\3!\13\3\3\4\3\4\3\5\3"+
-		"\5\3\5\2\3\4\6\2\4\6\b\2\4\3\2\6\7\3\2\4\5\2\'\2\n\3\2\2\2\4\27\3\2\2"+
-		"\2\6\"\3\2\2\2\b$\3\2\2\2\n\13\5\4\3\2\13\f\7\2\2\3\f\3\3\2\2\2\r\16\b"+
-		"\3\1\2\16\17\7\n\2\2\17\20\5\4\3\2\20\21\7\13\2\2\21\30\3\2\2\2\22\23"+
-		"\7\b\2\2\23\30\5\4\3\7\24\30\5\b\5\2\25\30\7\r\2\2\26\30\7\16\2\2\27\r"+
-		"\3\2\2\2\27\22\3\2\2\2\27\24\3\2\2\2\27\25\3\2\2\2\27\26\3\2\2\2\30\37"+
-		"\3\2\2\2\31\32\f\6\2\2\32\33\5\6\4\2\33\34\5\4\3\7\34\36\3\2\2\2\35\31"+
-		"\3\2\2\2\36!\3\2\2\2\37\35\3\2\2\2\37 \3\2\2\2 \5\3\2\2\2!\37\3\2\2\2"+
-		"\"#\t\2\2\2#\7\3\2\2\2$%\t\3\2\2%\t\3\2\2\2\4\27\37";
+		"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\13&\4\2\t\2\4\3\t"+
+		"\3\4\4\t\4\4\5\t\5\3\2\3\2\3\2\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\3\5\3"+
+		"\27\n\3\3\3\3\3\3\3\3\3\7\3\35\n\3\f\3\16\3 \13\3\3\4\3\4\3\5\3\5\3\5"+
+		"\2\3\4\6\2\4\6\b\2\4\3\2\5\6\3\2\3\4\2%\2\n\3\2\2\2\4\26\3\2\2\2\6!\3"+
+		"\2\2\2\b#\3\2\2\2\n\13\5\4\3\2\13\f\7\2\2\3\f\3\3\2\2\2\r\16\b\3\1\2\16"+
+		"\17\7\t\2\2\17\20\5\4\3\2\20\21\7\n\2\2\21\27\3\2\2\2\22\23\7\7\2\2\23"+
+		"\27\5\4\3\6\24\27\5\b\5\2\25\27\7\b\2\2\26\r\3\2\2\2\26\22\3\2\2\2\26"+
+		"\24\3\2\2\2\26\25\3\2\2\2\27\36\3\2\2\2\30\31\f\5\2\2\31\32\5\6\4\2\32"+
+		"\33\5\4\3\6\33\35\3\2\2\2\34\30\3\2\2\2\35 \3\2\2\2\36\34\3\2\2\2\36\37"+
+		"\3\2\2\2\37\5\3\2\2\2 \36\3\2\2\2!\"\t\2\2\2\"\7\3\2\2\2#$\t\3\2\2$\t"+
+		"\3\2\2\2\4\26\36";
 	public static final ATN _ATN =
 		new ATNDeserializer().deserialize(_serializedATN.toCharArray());
 	static {
