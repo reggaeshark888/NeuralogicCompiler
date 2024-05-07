@@ -1,2 +1,6 @@
 antlr4-python3-runtime
 gurobipy
+numpy
+torch
+torchviz
+matplotlib
