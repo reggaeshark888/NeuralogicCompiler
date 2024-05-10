@@ -79,15 +79,12 @@ def train(model, loss_function, optimizer, x, y, no_of_epochs):
         # calculate the loss
         loss = loss_function(y_hat, y)
         all_loss.append(loss.item())
-        loss.backward()
-
-        # optimize the weights and bias
-
-        # takes a step in the parameter step opposite to the gradient, peforms the update rule
-        optimizer.step()
-
+        
         # clears out the old gradients from the previous step
         optimizer.zero_grad()
+        loss.backward()
+        # takes a step in the parameter step opposite to the gradient, peforms the update rule
+        optimizer.step()
 
         print(all_loss[epoch])
 
@@ -110,10 +107,26 @@ def calculate_penalty(tensor, above_threshold, LAMBDA):
 def calculate_central_penalty(tensor, LAMBDA):
     return tensor * 2 * LAMBDA
 
+def calculate_total_opposite_sign_penalty(model, lambda_sign=0.05):
+    total_penalty = 0
+    # iterate over all layers of the model
+    for layer in model.children():
+        if isinstance(layer, nn.Linear):
+            weights = layer.weight
+            bias = layer.bias
+            # Compute the penalty for this layer's weights and bias
+            penalty = torch.sum(lambda_sign * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
+                    # TODO: add the loss 
+                    #+ torch.sum(lambda_sign * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
+            total_penalty += penalty
+
+    return total_penalty
+
 def train_with_rectified_L2(model, loss_function, optimizer, x, y, 
                             no_of_epochs=90000, ALPHA=0.5, LAMBDA=1, initial_lr=0.01, max_lr=1):
     # store loss and penalization for each epoch
-    all_loss = []
+    all_loss_without_reg = []
+    all_loss_with_reg = []
 
     for epoch in range(no_of_epochs):
         #Calculate the new learning rate
@@ -126,10 +139,19 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
 
         # compute gradient G1 - loss
         loss = loss_function(y_hat, y)
-        all_loss.append(loss.item())
+        all_loss_without_reg.append(loss.item())
 
+        # compute opposite sign penalty
+        reg_penalty = calculate_total_opposite_sign_penalty(model_XOR)
+
+        # total loss with regularization
+        total_loss = loss + reg_penalty
+        all_loss_with_reg.append(total_loss.item())
+
+        # clears out the old gradients from the previous step
+        optimizer.zero_grad()
         # parameter update according to G1
-        loss.backward()
+        total_loss.backward()
         # takes a step in the parameter step opposite to the gradient, peforms the update rule
         optimizer.step()
 
@@ -167,14 +189,17 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
                         param.data
                     )
 
-        # clears out the old gradients from the previous step
-        optimizer.zero_grad()
+        
 
-        print(all_loss[epoch])
-        print(lr)
+        print("epoch", epoch)
+        print("loss without reg", all_loss_without_reg[epoch])
+        print("loss with reg", all_loss_with_reg[epoch])
+        print("learning rate", lr)
+        print_network_parameters_for_neurons(model_XOR)
 
+        z = 0
 
-    return all_loss
+    return all_loss_with_reg
         
 
 class TwoLayerMLP(nn.Module):
@@ -193,11 +218,11 @@ class TwoLayerMLP(nn.Module):
 # example usage
 if __name__ == '__main__':
     # HYPERPARAMETERS
-    INIITIAL_LEARNING_RATE  = 0.2  # Starting learning rate
-    MAXIMUM_LEARNING_RATE = 1         # Maximum learning rate
+    INIITIAL_LEARNING_RATE  = 0.1  # Starting learning rate
+    MAXIMUM_LEARNING_RATE = 2   # Maximum learning rate
     EPOCHS = 30000
-    ALPHA = 5
-    LAMBDA = 0.01
+    ALPHA = 2
+    LAMBDA = 0.05
 
     # dataset
     X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
@@ -218,7 +243,3 @@ if __name__ == '__main__':
                                     initial_lr=INIITIAL_LEARNING_RATE,
                                     max_lr=MAXIMUM_LEARNING_RATE)
 
-    #all_loss = train(model_XOR, loss_function, optimizer, X_train, y_train, 90000)
-    #y_pred = model_XOR.forward(X_test)
-    #plt.scatter(y_pred.detach().numpy(), y_test)
-    #plt.show()
