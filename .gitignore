@@ -2,4 +2,7 @@
 neura-logic-comp-env
 __pycache__/*
 venv/*
+mlruns/*
 test.ipynb
+test.py
+*.png
