@@ -90,12 +90,12 @@ def train(model, loss_function, optimizer, x, y, no_of_epochs):
 
     return all_loss
 
-def create_masks(param_tensor, threshold):
+def create_masks(param_tensor, threshold=0.5):
     greater_than_threshold = param_tensor >= threshold
     less_than_threshold = param_tensor <= -threshold
     return greater_than_threshold, less_than_threshold
 
-def create_center_mask(param_tensor, threshold):
+def create_center_mask(param_tensor, threshold=1):
     return (param_tensor > -threshold) & (param_tensor < threshold)
 
 def calculate_penalty(tensor, above_threshold, LAMBDA):
@@ -107,32 +107,117 @@ def calculate_penalty(tensor, above_threshold, LAMBDA):
 def calculate_central_penalty(tensor, LAMBDA):
     return tensor * 2 * LAMBDA
 
-def calculate_total_opposite_sign_penalty(model, lambda_sign=0.05):
+def calculate_integer_penalty(model, lambda_integer=0.05):
     total_penalty = 0
+    for _, param in model.named_parameters():
+        # calculate the update based on the mask and update parameters
+        gt_penalty = calculate_penalty(param.data, True, lambda_integer)
+        ls_penalty = calculate_penalty(param.data, False, lambda_integer)
+
+        gt_mask, ls_mask = create_masks(param.data)
+
+        total_penalty += torch.sum(gt_penalty*gt_mask) + torch.sum(ls_penalty*ls_mask)
+
+    return total_penalty
+
+def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
+    total_penalty = 0
+    epsilon = 1e-8  # Small constant
     # iterate over all layers of the model
     for layer in model.children():
         if isinstance(layer, nn.Linear):
             weights = layer.weight
             bias = layer.bias
             # Compute the penalty for this layer's weights and bias
-            penalty = torch.sum(lambda_sign * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
+            penalty = torch.sum(LAMBDA_POLARITY * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
                     # TODO: add the loss 
                     #+ torch.sum(lambda_sign * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
             total_penalty += penalty
+    
+    return total_penalty + epsilon
+
+def calculate_integer_penalty2(model, LAMBDA_INTEGERS=0.01):
+    total_penalty = 0.0
+    for param in model.parameters():
+        if param.requires_grad:
+            # Finding the nearest multiples for 10 and -15
+            # We use the floor division // to find the closest integer factor and then multiply back
+            nearest_10 = torch.round(param / 10.0) * 10
+            nearest_minus_15 = torch.round(param / -15.0) * -15
+            
+            # Calculate squared differences from the nearest multiples
+            penalty_10 = (param - nearest_10).pow(2)
+            penalty_minus_15 = (param - nearest_minus_15).pow(2)
+            
+            # Take the minimum of the squared differences for each element
+            element_penalty = torch.min(penalty_10, penalty_minus_15)
+            
+            # Sum up all penalties
+            total_penalty += element_penalty.sum()
+
+    # Scale the penalty by the regularization strength lambda
+    return LAMBDA_INTEGERS * total_penalty
+
+def calculate_integer_penalty3(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS = 0.01):
+    """
+    Calculate the regularization penalty for the model parameters.
+    
+    Args:
+    model (nn.Module): The neural network model.
+    targets (list): List of target values for the parameters.
+    lambda_reg (float): Regularization strength.
+
+    Returns:
+    torch.Tensor: The regularization penalty.
+    """
+    total_penalty = 0.0
+    epsilon = 1e-8  # Small constant
+    for param in model.parameters():
+        if param.requires_grad:
+            # Calculate the minimum squared difference for each parameter
+            penalties = [(param - target)**2 for target in targets]
+            min_penalty = torch.min(torch.stack(penalties), dim=0)[0]
+            # Apply square root to the minimum squared difference
+            sqrt_penalty = torch.sqrt(min_penalty)
+            # Sum up the penalties
+            total_penalty += sqrt_penalty.sum()
+    
+    return LAMBDA_INTEGERS * total_penalty + epsilon
+
+def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
+    # TODO: modify to compute the variance of only top two weights
+    regularization_loss = 0.0
+    for layer in model.children():
+        if hasattr(layer, 'weight'):  # Ensure the layer has weights
+            # Calculate the mean of weights for each neuron
+            weights = layer.weight
+            mean_weights = torch.mean(weights, dim=1, keepdim=True)
+            # Calculate the mean squared deviation from the mean for each weight
+            epsilon = 1e-8  # Small constant
+            variance = torch.mean((weights - mean_weights) ** 2 + epsilon, dim=1)
+            # Sum up the variances for all neurons in the layer
+            total_variance = torch.sum(variance)
+            regularization_loss += total_variance
+    total_penalty = lambda_magnitude * regularization_loss
 
     return total_penalty
 
 def train_with_rectified_L2(model, loss_function, optimizer, x, y, 
-                            no_of_epochs=90000, ALPHA=0.5, LAMBDA=1, initial_lr=0.01, max_lr=1):
+                            no_of_epochs=90000, ALPHA=0.5,
+                            LAMBDA_MAGNITUDE = 0.01,
+                            LAMBDA_POLARITY = 0.01,
+                            LAMBDA_INTEGERS = 0.01,
+                            initial_lr=0.01,
+                            max_lr=1):
     # store loss and penalization for each epoch
     all_loss_without_reg = []
     all_loss_with_reg = []
 
     for epoch in range(no_of_epochs):
-        #Calculate the new learning rate
-        lr = initial_lr + (max_lr - initial_lr) * (epoch / no_of_epochs)
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
+        # #Calculate the new learning rate
+        # lr = initial_lr + (max_lr - initial_lr) * (epoch / no_of_epochs)
+        # for param_group in optimizer.param_groups:
+        #     param_group['lr'] = lr
 
         # forward pass
         y_hat = model(x)
@@ -142,10 +227,26 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         all_loss_without_reg.append(loss.item())
 
         # compute opposite sign penalty
-        reg_penalty = calculate_total_opposite_sign_penalty(model_XOR)
+        polarity_penalty = calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY)
+
+        # compute same weight magnitude penalty
+        magnitude_penalty = calculate_weight_magnitude_penalty(model, LAMBDA_MAGNITUDE)
+
+        # compute distance from integer numbers penalty
+        # integer_penalty = calculate_integer_penalty2(model_XOR)
+        # integer_penalty = calculate_integer_penalty(model_XOR)
+        integer_penalty = calculate_integer_penalty3(model, LAMBDA_INTEGERS=LAMBDA_INTEGERS)
 
         # total loss with regularization
-        total_loss = loss + reg_penalty
+        if epoch > 1000:
+            total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty
+        else:
+            total_loss = loss + polarity_penalty + magnitude_penalty
+
+        if total_loss < 0.04:
+            print("Optimal solution found")
+            return
+
         all_loss_with_reg.append(total_loss.item())
 
         # clears out the old gradients from the previous step
@@ -153,53 +254,17 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         # parameter update according to G1
         total_loss.backward()
         # takes a step in the parameter step opposite to the gradient, peforms the update rule
-        optimizer.step()
-
-        # parameter update according to G2
-        if epoch > 10000:
-            for _, param in model.named_parameters():
-                # apply the masking to determine whether parameter is above or below threshold
-                gt_mask, ls_mask = create_masks(param.data, ALPHA)
-
-                # calculate the update based on the mask and update parameters
-                gt_penalty = calculate_penalty(param.data, True, LAMBDA)
-                ls_penalty = calculate_penalty(param.data, False, LAMBDA)
-
-                # Apply the updates
-                param.data = torch.where(
-                    gt_mask,
-                    param.data - gt_penalty,
-                    param.data
-                )
-                
-                param.data = torch.where(
-                    ls_mask,
-                    param.data - ls_penalty,
-                    param.data
-                )
-
-                # apply the J=0 case in the last few iterations
-                if no_of_epochs - epoch < 5:
-                    ct_mask = create_center_mask(param.data, ALPHA)
-                    ct_penalty = calculate_central_penalty(param.data, LAMBDA)
-
-                    param.data = torch.where(
-                        ct_mask,
-                        ct_penalty,
-                        param.data
-                    )
-
-        
+        optimizer.step()        
 
         print("epoch", epoch)
         print("loss without reg", all_loss_without_reg[epoch])
         print("loss with reg", all_loss_with_reg[epoch])
-        print("learning rate", lr)
-        print_network_parameters_for_neurons(model_XOR)
+        #print("learning rate", lr)
+        print_network_parameters_for_neurons(model)
 
         z = 0
 
-    return all_loss_with_reg
+    return all_loss_without_reg, all_loss_with_reg
         
 
 class TwoLayerMLP(nn.Module):
@@ -218,11 +283,13 @@ class TwoLayerMLP(nn.Module):
 # example usage
 if __name__ == '__main__':
     # HYPERPARAMETERS
-    INIITIAL_LEARNING_RATE  = 0.1  # Starting learning rate
-    MAXIMUM_LEARNING_RATE = 2   # Maximum learning rate
-    EPOCHS = 30000
-    ALPHA = 2
-    LAMBDA = 0.05
+    INIITIAL_LEARNING_RATE  = 0.25  # Starting learning rate
+    MAXIMUM_LEARNING_RATE = 0.5   # Maximum learning rate
+    EPOCHS = 50000
+    ALPHA = 0.5
+    LAMBDA_MAGNITUDE = 0.01
+    LAMBDA_POLARITY = 0.01
+    LAMBDA_INTEGERS = 0.01
 
     # dataset
     X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
@@ -230,7 +297,8 @@ if __name__ == '__main__':
     model_XOR = TwoLayerMLP()
     # define the loss
     loss_function = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
+    #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
+    optimizer = torch.optim.Adam(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
 
     all_loss = train_with_rectified_L2(model_XOR, 
                                     loss_function, 
@@ -239,7 +307,44 @@ if __name__ == '__main__':
                                     y_train,
                                     no_of_epochs=EPOCHS,
                                     ALPHA=ALPHA,
-                                    LAMBDA=LAMBDA,
+                                    LAMBDA_MAGNITUDE=LAMBDA_MAGNITUDE,
+                                    LAMBDA_POLARITY=LAMBDA_POLARITY,
+                                    LAMBDA_INTEGERS=LAMBDA_INTEGERS,
                                     initial_lr=INIITIAL_LEARNING_RATE,
                                     max_lr=MAXIMUM_LEARNING_RATE)
 
+
+# TODO: move into a function
+# # parameter update according to G2
+# if epoch > 10000:
+#     for _, param in model.named_parameters():
+#         # apply the masking to determine whether parameter is above or below threshold
+#         gt_mask, ls_mask = create_masks(param.data, ALPHA)
+
+#         # calculate the update based on the mask and update parameters
+#         gt_penalty = calculate_penalty(param.data, True, LAMBDA)
+#         ls_penalty = calculate_penalty(param.data, False, LAMBDA)
+
+#         # Apply the updates
+#         param.data = torch.where(
+#             gt_mask,
+#             param.data - gt_penalty,
+#             param.data
+#         )
+        
+#         param.data = torch.where(
+#             ls_mask,
+#             param.data - ls_penalty,
+#             param.data
+#         )
+
+#         # apply the J=0 case in the last few iterations
+#         if no_of_epochs - epoch < 5:
+#             ct_mask = create_center_mask(param.data, ALPHA)
+#             ct_penalty = calculate_central_penalty(param.data, LAMBDA)
+
+#             param.data = torch.where(
+#                 ct_mask,
+#                 ct_penalty,
+#                 param.data
+#             )
