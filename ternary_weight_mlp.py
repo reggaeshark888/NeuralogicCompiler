@@ -30,9 +30,9 @@ def graph_neural_network(network):
     graph.render('network_graph', format='png', cleanup=True)  # This saves and cleans up the dot file
 
 def create_torch_XOR_dataset():
-    x1 = np.array ([0., 0., 1., 1.], dtype = np.float32)
-    x2 = np.array ([0., 1., 0., 1.], dtype = np.float32)
-    y  = np.array ([0., 1., 1., 0.],dtype = np.float32)
+    x1 = np.array ([0., 0., 1., 1.], dtype = np.float64)
+    x2 = np.array ([0., 1., 0., 1.], dtype = np.float64)
+    y  = np.array ([0., 1., 1., 0.],dtype = np.float64)
 
     x1 = np.repeat(x1, 50)
     x2 = np.repeat(x2, 50)  
@@ -46,9 +46,9 @@ def create_torch_XOR_dataset():
     index_shuffle = np.arange(x1.shape[0])
     np.random.shuffle(index_shuffle)
 
-    x1 = x1.astype(np.float32)
-    x2 = x2.astype(np.float32)
-    y = y.astype(np.float32)
+    x1 = x1.astype(np.float64)
+    x2 = x2.astype(np.float64)
+    y = y.astype(np.float64)
 
     x1 = x1[index_shuffle]
     x2 = x2[index_shuffle]
@@ -171,7 +171,6 @@ def calculate_integer_penalty3(model, targets = [10, -10, -15, 15], LAMBDA_INTEG
     torch.Tensor: The regularization penalty.
     """
     total_penalty = 0.0
-    epsilon = 1e-8  # Small constant
     for param in model.parameters():
         if param.requires_grad:
             # Calculate the minimum squared difference for each parameter
@@ -182,7 +181,7 @@ def calculate_integer_penalty3(model, targets = [10, -10, -15, 15], LAMBDA_INTEG
             # Sum up the penalties
             total_penalty += sqrt_penalty.sum()
     
-    return LAMBDA_INTEGERS * total_penalty + epsilon
+    return LAMBDA_INTEGERS * total_penalty
 
 def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
     # TODO: modify to compute the variance of only top two weights
@@ -193,8 +192,7 @@ def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
             weights = layer.weight
             mean_weights = torch.mean(weights, dim=1, keepdim=True)
             # Calculate the mean squared deviation from the mean for each weight
-            epsilon = 1e-8  # Small constant
-            variance = torch.mean((weights - mean_weights) ** 2 + epsilon, dim=1)
+            variance = torch.mean((weights - mean_weights) ** 2, dim=1)
             # Sum up the variances for all neurons in the layer
             total_variance = torch.sum(variance)
             regularization_loss += total_variance
@@ -219,11 +217,15 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         # for param_group in optimizer.param_groups:
         #     param_group['lr'] = lr
 
+        epsilon = 1e-8  # Small constant to prevent log(0)
         # forward pass
-        y_hat = model(x)
+        y_hat_raw = model(x)
+        y_hat = torch.clamp(y_hat_raw, epsilon, 1 - epsilon)  # Clamping probabilities
 
         # compute gradient G1 - loss
         loss = loss_function(y_hat, y)
+        
+
         all_loss_without_reg.append(loss.item())
 
         # compute opposite sign penalty
@@ -243,7 +245,7 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         else:
             total_loss = loss + polarity_penalty + magnitude_penalty
 
-        if total_loss < 0.04:
+        if total_loss < 0.02:
             print("Optimal solution found")
             return
 
@@ -253,8 +255,13 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         optimizer.zero_grad()
         # parameter update according to G1
         total_loss.backward()
+
+        # Gradient Clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
+
         # takes a step in the parameter step opposite to the gradient, peforms the update rule
-        optimizer.step()        
+        optimizer.step()
+
 
         print("epoch", epoch)
         print("loss without reg", all_loss_without_reg[epoch])
@@ -276,29 +283,49 @@ class TwoLayerMLP(nn.Module):
     def forward(self, x):
         x = torch.sigmoid(self.layer1(x))
         x = torch.sigmoid(self.output_layer(x))
-        return x    
+        return x
+    
+class ThreeLayerMLP(nn.Module):
+    def __init__(self):
+        super(ThreeLayerMLP, self).__init__()
+        # Define the first layer with 4 input features and 4 output neurons
+        self.layer1 = nn.Linear(4, 4)
+        # Define the second layer with 4 input neurons (from layer1) and 2 output neurons
+        self.layer2 = nn.Linear(4, 2)
+        # Define the output layer with 2 input neurons (from layer2) and 1 output neuron
+        self.output_layer = nn.Linear(2, 1)
+    
+    def forward(self, x):
+        # Forward pass through the first layer followed by a sigmoid activation
+        x = torch.sigmoid(self.layer1(x))
+        # Forward pass through the second layer followed by a sigmoid activation
+        x = torch.sigmoid(self.layer2(x))
+        # Forward pass through the output layer followed by a sigmoid activation
+        x = torch.sigmoid(self.output_layer(x))
+        return x
+
 
 
 
 # example usage
 if __name__ == '__main__':
     # HYPERPARAMETERS
-    INIITIAL_LEARNING_RATE  = 0.25  # Starting learning rate
+    INIITIAL_LEARNING_RATE  = 0.001  # Starting learning rate
     MAXIMUM_LEARNING_RATE = 0.5   # Maximum learning rate
-    EPOCHS = 50000
+    EPOCHS = 30000
     ALPHA = 0.5
-    LAMBDA_MAGNITUDE = 0.01
+    LAMBDA_MAGNITUDE = 0.1
     LAMBDA_POLARITY = 0.01
-    LAMBDA_INTEGERS = 0.01
+    LAMBDA_INTEGERS = 0.005
 
     # dataset
     X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
 
-    model_XOR = TwoLayerMLP()
+    model_XOR = TwoLayerMLP().double()
     # define the loss
     loss_function = torch.nn.BCELoss()
     #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
-    optimizer = torch.optim.Adam(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
+    optimizer = torch.optim.Adam(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
 
     all_loss = train_with_rectified_L2(model_XOR, 
                                     loss_function, 
