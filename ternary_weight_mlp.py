@@ -30,6 +30,38 @@ def graph_neural_network(network):
     graph.render('network_graph', format='png', cleanup=True)  # This saves and cleans up the dot file
 
 def create_torch_XOR_dataset():
+    """
+    Generate a dataset for the XOR problem, suitable for training in PyTorch.
+
+    This function creates a dataset representing the XOR logic gate, extends it by repeating
+    each data point 50 times, introduces slight random noise to the inputs, and finally shuffles
+    the dataset. The dataset is then split into training and testing subsets and converted to
+    PyTorch tensors.
+
+    Returns
+    -------
+    X_train : torch.Tensor
+        The training set input features, shape (150, 2). Each row corresponds to an input pair.
+    y_train : torch.Tensor
+        The training set labels, shape (150, 1). Each entry is the XOR result of the corresponding input pair.
+    X_test : torch.Tensor
+        The testing set input features, shape (50, 2). Each row corresponds to an input pair.
+    y_test : torch.Tensor
+        The testing set labels, shape (50, 1). Each entry is the XOR result of the corresponding input pair.
+
+    Notes
+    -----
+    The dataset initially consists of four points: (0,0), (0,1), (1,0), and (1,1), with corresponding
+    XOR outputs: 0, 1, 1, and 0 respectively. Each point is repeated 50 times to increase the dataset size,
+    then random noise up to 0.05 is added to the inputs. The entire dataset is shuffled to ensure
+    randomness in training and testing splits. The final dataset is divided into 75% training and 25% testing.
+
+    Example
+    -------
+    >>> X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
+    >>> print(X_train.shape, y_train.shape)
+    torch.Size([150, 2]), torch.Size([150, 1])
+    """
     x1 = np.array ([0., 0., 1., 1.], dtype = np.float64)
     x2 = np.array ([0., 1., 0., 1.], dtype = np.float64)
     y  = np.array ([0., 1., 1., 0.],dtype = np.float64)
@@ -67,6 +99,76 @@ def create_torch_XOR_dataset():
     y_test  = y_torch[150:,:]
 
     return X_train, y_train, X_test, y_test
+
+def create_torch_XOR_XNOR_dataset():
+    """
+    Generate a dataset for the combined boolean function (a XOR b) AND (c XNOR d),
+    suitable for training in PyTorch.
+
+    This function creates a dataset where each input pair (a, b) and (c, d) is processed
+    through XOR and XNOR operations respectively. The final output is true only if
+    (a XOR b) AND (c XNOR d) are true. The dataset is replicated, noise is added,
+    and then shuffled before splitting into training and testing subsets and converting
+    to PyTorch tensors.
+
+    Returns
+    -------
+    X_train : torch.Tensor
+        The training set input features, shape (300, 4). Each row corresponds to four inputs (a, b, c, d).
+    y_train : torch.Tensor
+        The training set labels, shape (300, 1). Each entry is the result of (a XOR b) AND (c XNOR d).
+    X_test : torch.Tensor
+        The testing set input features, shape (100, 4). Each row corresponds to four inputs (a, b, c, d).
+    y_test : torch.Tensor
+        The testing set labels, shape (100, 1). Each entry is the result of (a XOR b) AND (c XNOR d).
+
+    Notes
+    -----
+    The initial dataset consists of all combinations of binary inputs for (a, b, c, d). Random noise
+    up to 0.05 is added to the inputs after replicating each initial combination 25 times. The dataset
+    is then shuffled to ensure randomness in training and testing splits. The final dataset is divided
+    into 75% training and 25% testing.
+
+    Example
+    -------
+    >>> X_train, y_train, X_test, y_test = create_torch_XOR_XNOR_dataset()
+    >>> print(X_train.shape, y_train.shape)
+    torch.Size([300, 4]), torch.Size([300, 1])
+    """
+    import numpy as np
+    import torch
+
+    # Define all combinations of (a, b, c, d)
+    abcd = np.array([[a, b, c, d] for a in (0, 1) for b in (0, 1) for c in (0, 1) for d in (0, 1)])
+    a, b, c, d = abcd[:, 0], abcd[:, 1], abcd[:, 2], abcd[:, 3]
+
+    # Apply XOR to (a, b) and XNOR to (c, d)
+    xor = np.logical_xor(a, b)
+    xnor = np.logical_not(np.logical_xor(c, d))
+    y = np.logical_and(xor, xnor)
+
+    # Replicate and add noise
+    inputs = np.repeat(abcd, 25, axis=0)
+    inputs = inputs + np.random.rand(*inputs.shape) * 0.05
+    outputs = np.repeat(y, 25)
+
+    # Shuffle the dataset
+    indices = np.arange(inputs.shape[0])
+    np.random.shuffle(indices)
+    inputs = inputs[indices]
+    outputs = outputs[indices]
+
+    # Convert to PyTorch tensors and reshape
+    inputs_torch = torch.from_numpy(inputs).double()
+    outputs_torch = torch.from_numpy(outputs).double().view(-1, 1)
+
+    # Combine features and split the dataset
+    split_idx = int(0.75 * len(inputs_torch))
+    X_train, X_test = inputs_torch[:split_idx, :], inputs_torch[split_idx:, :]
+    y_train, y_test = outputs_torch[:split_idx, :], outputs_torch[split_idx:, :]
+
+    return X_train, y_train, X_test, y_test
+
 
 def train(model, loss_function, optimizer, x, y, no_of_epochs):
     # store loss for each epoch
@@ -184,20 +286,34 @@ def calculate_integer_penalty3(model, targets = [10, -10, -15, 15], LAMBDA_INTEG
     return LAMBDA_INTEGERS * total_penalty
 
 def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
-    # TODO: modify to compute the variance of only top two weights
+    """
+    Calculates a regularization penalty which encourages the two largest (by magnitude) weights
+    of each neuron in the model's layers to have similar magnitudes.
+
+    Parameters:
+    - model (torch.nn.Module): The neural network model.
+    - lambda_magnitude (float, optional): Regularization coefficient. Default is 0.01.
+
+    Returns:
+    - total_penalty (float): The computed regularization penalty.
+    """
     regularization_loss = 0.0
+
     for layer in model.children():
         if hasattr(layer, 'weight'):  # Ensure the layer has weights
-            # Calculate the mean of weights for each neuron
-            weights = layer.weight
-            mean_weights = torch.mean(weights, dim=1, keepdim=True)
-            # Calculate the mean squared deviation from the mean for each weight
-            variance = torch.mean((weights - mean_weights) ** 2, dim=1)
+            weights = layer.weight.data  # Use the weight data tensor
+            # Obtain the absolute values of weights and sort each row
+            sorted_weights, _ = torch.sort(torch.abs(weights), descending=True)
+            # Select the top two largest weights by magnitude for each neuron
+            top_two_weights = sorted_weights[:, :2]
+            # Calculate the mean squared deviation from the mean for the two largest weights
+            mean_top_two = torch.mean(top_two_weights, dim=1, keepdim=True)
+            variance_top_two = torch.mean((top_two_weights - mean_top_two) ** 2, dim=1)
             # Sum up the variances for all neurons in the layer
-            total_variance = torch.sum(variance)
+            total_variance = torch.sum(variance_top_two)
             regularization_loss += total_variance
-    total_penalty = lambda_magnitude * regularization_loss
 
+    total_penalty = lambda_magnitude * regularization_loss
     return total_penalty
 
 def train_with_rectified_L2(model, loss_function, optimizer, x, y, 
@@ -212,15 +328,8 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
     all_loss_with_reg = []
 
     for epoch in range(no_of_epochs):
-        # #Calculate the new learning rate
-        # lr = initial_lr + (max_lr - initial_lr) * (epoch / no_of_epochs)
-        # for param_group in optimizer.param_groups:
-        #     param_group['lr'] = lr
-
-        epsilon = 1e-8  # Small constant to prevent log(0)
         # forward pass
-        y_hat_raw = model(x)
-        y_hat = torch.clamp(y_hat_raw, epsilon, 1 - epsilon)  # Clamping probabilities
+        y_hat = model(x)
 
         # compute gradient G1 - loss
         loss = loss_function(y_hat, y)
@@ -318,6 +427,28 @@ if __name__ == '__main__':
     LAMBDA_POLARITY = 0.01
     LAMBDA_INTEGERS = 0.005
 
+
+    # X_train, y_train, X_test, y_test = create_torch_XOR_XNOR_dataset()
+
+    # model_XOR_AND_XNOR = ThreeLayerMLP().double()
+    # # define the loss
+    # loss_function = torch.nn.BCELoss()
+    # #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
+    # optimizer = torch.optim.Adam(model_XOR_AND_XNOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
+
+    # all_loss = train_with_rectified_L2(model_XOR_AND_XNOR, 
+    #                                 loss_function, 
+    #                                 optimizer, 
+    #                                 X_train, 
+    #                                 y_train,
+    #                                 no_of_epochs=EPOCHS,
+    #                                 ALPHA=ALPHA,
+    #                                 LAMBDA_MAGNITUDE=LAMBDA_MAGNITUDE,
+    #                                 LAMBDA_POLARITY=LAMBDA_POLARITY,
+    #                                 LAMBDA_INTEGERS=LAMBDA_INTEGERS,
+    #                                 initial_lr=INIITIAL_LEARNING_RATE,
+    #                                 max_lr=MAXIMUM_LEARNING_RATE)
+
     # dataset
     X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
 
@@ -341,37 +472,3 @@ if __name__ == '__main__':
                                     max_lr=MAXIMUM_LEARNING_RATE)
 
 
-# TODO: move into a function
-# # parameter update according to G2
-# if epoch > 10000:
-#     for _, param in model.named_parameters():
-#         # apply the masking to determine whether parameter is above or below threshold
-#         gt_mask, ls_mask = create_masks(param.data, ALPHA)
-
-#         # calculate the update based on the mask and update parameters
-#         gt_penalty = calculate_penalty(param.data, True, LAMBDA)
-#         ls_penalty = calculate_penalty(param.data, False, LAMBDA)
-
-#         # Apply the updates
-#         param.data = torch.where(
-#             gt_mask,
-#             param.data - gt_penalty,
-#             param.data
-#         )
-        
-#         param.data = torch.where(
-#             ls_mask,
-#             param.data - ls_penalty,
-#             param.data
-#         )
-
-#         # apply the J=0 case in the last few iterations
-#         if no_of_epochs - epoch < 5:
-#             ct_mask = create_center_mask(param.data, ALPHA)
-#             ct_penalty = calculate_central_penalty(param.data, LAMBDA)
-
-#             param.data = torch.where(
-#                 ct_mask,
-#                 ct_penalty,
-#                 param.data
-#             )
