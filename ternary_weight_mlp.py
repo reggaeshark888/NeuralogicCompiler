@@ -238,26 +238,63 @@ def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
     
     return total_penalty + epsilon
 
-def calculate_integer_penalty2(model, LAMBDA_INTEGERS=0.01):
-    total_penalty = 0.0
-    for param in model.parameters():
-        if param.requires_grad:
-            # Finding the nearest multiples for 10 and -15
-            # We use the floor division // to find the closest integer factor and then multiply back
-            nearest_10 = torch.round(param / 10.0) * 10
-            nearest_minus_15 = torch.round(param / -15.0) * -15
-            
-            # Calculate squared differences from the nearest multiples
-            penalty_10 = (param - nearest_10).pow(2)
-            penalty_minus_15 = (param - nearest_minus_15).pow(2)
-            
-            # Take the minimum of the squared differences for each element
-            element_penalty = torch.min(penalty_10, penalty_minus_15)
-            
-            # Sum up all penalties
-            total_penalty += element_penalty.sum()
+def calculate_integer_penalty2(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS=0.01):
+    """
+    Calculate a regularization penalty that encourages weights and biases of each neuron
+    to converge towards specified target values under conditions that weights and biases
+    should have opposite polarities, and one should target closer to 15 or -15, while the other
+    should target closer to 10 or -10, depending on their relative magnitudes.
+    
+    Args:
+        model (nn.Module): The neural network model.
+        LAMBDA_INTEGERS (float): Regularization strength.
 
-    # Scale the penalty by the regularization strength lambda
+    Returns:
+        torch.Tensor: The regularization penalty.
+    """
+    total_penalty = 0.0
+    for layer in model.children():
+        if hasattr(layer, 'weight') and hasattr(layer, 'bias'):
+            weights = layer.weight
+            biases = layer.bias
+
+            for i in range(weights.shape[0]):  # Iterate over each neuron
+                neuron_weights = weights[i]
+                neuron_bias = biases[i]
+
+                # Determine targets based on the magnitude relationship of weights and bias
+                weight_mean = neuron_weights.mean().item()
+                bias_value = neuron_bias.item()
+
+                # Select targets for weights
+                if weight_mean > 0:
+                    if abs(weight_mean) > abs(bias_value):
+                        weight_targets = [15]
+                        bias_targets = [-10]
+                    else:
+                        weight_targets = [10]
+                        bias_targets = [-15]
+                else:
+                    if abs(weight_mean) > abs(bias_value):
+                        weight_targets = [-15]
+                        bias_targets = [10]
+                    else:
+                        weight_targets = [-10]
+                        bias_targets = [15]
+
+                # Calculate penalties for weights targeting
+                weight_penalties = [(neuron_weights - target)**2 for target in weight_targets]
+                min_weight_penalty = torch.min(torch.stack(weight_penalties), dim=0)[0]
+                sqrt_weight_penalty = torch.sqrt(min_weight_penalty).sum()
+
+                # Calculate penalties for bias targeting
+                bias_penalties = [(neuron_bias - target)**2 for target in bias_targets]
+                min_bias_penalty = torch.min(torch.stack(bias_penalties), dim=0)[0]
+                sqrt_bias_penalty = torch.sqrt(min_bias_penalty)
+
+                # Sum up the penalties for the neuron
+                total_penalty += sqrt_weight_penalty + sqrt_bias_penalty
+
     return LAMBDA_INTEGERS * total_penalty
 
 def calculate_integer_penalty3(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS = 0.01):
@@ -346,7 +383,7 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         # compute distance from integer numbers penalty
         # integer_penalty = calculate_integer_penalty2(model_XOR)
         # integer_penalty = calculate_integer_penalty(model_XOR)
-        integer_penalty = calculate_integer_penalty3(model, LAMBDA_INTEGERS=LAMBDA_INTEGERS)
+        integer_penalty = calculate_integer_penalty2(model, LAMBDA_INTEGERS=LAMBDA_INTEGERS)
 
         # total loss with regularization
         if epoch > 1000:
