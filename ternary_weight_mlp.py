@@ -1,20 +1,30 @@
 import numpy as np
 
 import torch
-import matplotlib.pyplot as plt
 import torch.nn as nn
-import torch.optim as optim
 from torchviz import make_dot
 
 def print_network_parameters(network):
-    # Print weights and biases
+    """
+    Prints the weights and biases of a neural network's trainable parameters.
+
+    Args:
+    network (torch.nn.Module): The neural network whose parameters are to be printed.
+    """
     for name, param in network.named_parameters():
         if param.requires_grad:
             print(f"{name}:")
             print(param.data)
 
 def print_network_parameters_for_neurons(network):
-    # Print weights and biases for each neuron
+    """
+    Prints the weights and biases for each neuron in the neural network's trainable parameters.
+
+    It prints the data for each neuron individually.
+
+    Args:
+    network (torch.nn.Module): The neural network whose parameters are to be printed.
+    """
     for name, param in network.named_parameters():
         if param.requires_grad:
             print(f"{name}:")
@@ -26,6 +36,12 @@ def print_network_parameters_for_neurons(network):
                     print(f"  Neuron {idx + 1} bias: {bias.data.item()}")
 
 def graph_neural_network(network):
+    """
+    Generates a graphical representation of the neural network's architecture and saves it as a PNG file.
+
+    Args:
+    network (torch.nn.Module): The neural network to be graphically represented.
+    """
     graph = make_dot(params=dict(list(network.named_parameters())))
     graph.render('network_graph', format='png', cleanup=True)  # This saves and cleans up the dot file
 
@@ -148,9 +164,9 @@ def create_torch_XOR_XNOR_dataset():
     y = np.logical_and(xor, xnor)
 
     # Replicate and add noise
-    inputs = np.repeat(abcd, 25, axis=0)
+    inputs = np.repeat(abcd, 50, axis=0)
     inputs = inputs + np.random.rand(*inputs.shape) * 0.05
-    outputs = np.repeat(y, 25)
+    outputs = np.repeat(y, 50)
 
     # Shuffle the dataset
     indices = np.arange(inputs.shape[0])
@@ -235,18 +251,27 @@ def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
     - total_penalty (float): The computed regularization penalty.
     """
     total_penalty = 0
-    # iterate over all layers of the model
+
     for layer in model.children():
-        if isinstance(layer, nn.Linear):
+        if isinstance(layer, nn.Linear):  # Check for linear layers with weights and biases
             weights = layer.weight
             bias = layer.bias
-            # Compute the penalty for this layer's weights and bias
-            penalty = torch.sum(LAMBDA_POLARITY * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
-                    # TODO: add the loss 
-                    #+ torch.sum(lambda_sign * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
-            total_penalty += penalty
-    
-    return total_penalty
+
+            # Calculate the absolute values of the weights and sort them
+            abs_weights = torch.abs(weights)
+            sorted_indices = torch.argsort(abs_weights, dim=1, descending=True)
+            # Select indices of the top two weights by magnitude
+            top_two_indices = sorted_indices[:, :2]
+
+            # Gather the top two weights using the computed indices
+            top_two_weights = torch.gather(weights, 1, top_two_indices)
+
+            # Compute signs and apply the penalty
+            bias_signs = torch.sign(bias).unsqueeze(1)  # Reshape for broadcasting
+            penalties = torch.max(torch.zeros_like(top_two_weights), top_two_weights * bias_signs)
+            total_penalty += torch.sum(penalties)
+
+    return LAMBDA_POLARITY * total_penalty
 
 def calculate_integer_penalty2(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS=0.01):
     """
@@ -392,6 +417,23 @@ def calculate_sparse_penalty(model, lambda_sparsity=0.01):
     total_penalty = lambda_sparsity * regularization_loss
     return total_penalty
 
+def enforce_two_nonzero_weights(model):
+    """
+    Enforces that only the two largest weights (by absolute value) of each neuron remain nonzero.
+    All other weights are set to zero.
+
+    Parameters:
+    - model (torch.nn.Module): The neural network model.
+    """
+    with torch.no_grad():  # Ensure no gradient is computed to avoid affecting backpropagation
+        for layer in model.children():
+            if hasattr(layer, 'weight'):
+                weights = layer.weight.data
+                abs_weights = torch.abs(weights)
+                top_two_weights, _ = torch.topk(abs_weights, 2, dim=1)
+                min_top_two = top_two_weights[:, -1].unsqueeze(1)
+                layer.weight.data *= (abs_weights >= min_top_two).float()
+
 def train_with_rectified_L2(model, loss_function, optimizer, x, y, 
                             no_of_epochs=90000, ALPHA=0.5,
                             LAMBDA_MAGNITUDE = 0.01,
@@ -454,7 +496,6 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         # takes a step in the parameter step opposite to the gradient, peforms the update rule
         optimizer.step()
 
-
         print("epoch", epoch)
         print("loss without reg", all_loss_without_reg[epoch])
         print("loss with reg", all_loss_with_reg[epoch])
@@ -496,20 +537,60 @@ class ThreeLayerMLP(nn.Module):
         x = torch.sigmoid(self.output_layer(x))
         return x
 
+class SparseThreeLayerMLP(nn.Module):
+    def __init__(self):
+        super(SparseThreeLayerMLP, self).__init__()
+        # First layer has custom connections for each pair of inputs to neurons
+        self.layer1_neuron1 = nn.Linear(2, 1)  # Connects first two inputs to first neuron
+        self.layer1_neuron2 = nn.Linear(2, 1)  # Connects second two inputs to second neuron
+        self.layer1_neuron3 = nn.Linear(2, 1)  # Connects first two inputs to third neuron
+        self.layer1_neuron4 = nn.Linear(2, 1)  # Connects second two inputs to fourth neuron
 
+        # Second layer has neurons each receiving inputs from two specific neurons of the first layer
+        self.layer2_neuron1 = nn.Linear(2, 1)  # Connects outputs from first and third neurons of the first layer
+        self.layer2_neuron2 = nn.Linear(2, 1)  # Connects outputs from second and fourth neurons of the first layer
+
+        # Output layer remains a simple linear layer from the second layer
+        self.output_layer = nn.Linear(2, 1)
+    
+    def forward(self, x):
+        # Split input into two parts for distinct processing
+        inputs1 = x[:, :2]
+        inputs2 = x[:, 2:]
+
+        # Forward pass through the custom first layer
+        out1 = torch.sigmoid(self.layer1_neuron1(inputs1))
+        out2 = torch.sigmoid(self.layer1_neuron2(inputs2))
+        out3 = torch.sigmoid(self.layer1_neuron3(inputs1))
+        out4 = torch.sigmoid(self.layer1_neuron4(inputs2))
+
+        # Concatenate outputs to feed into the second layer
+        input_to_layer2_neuron1 = torch.cat((out1, out3), dim=1)
+        input_to_layer2_neuron2 = torch.cat((out2, out4), dim=1)
+
+        # Forward pass through the second layer
+        layer2_out1 = torch.sigmoid(self.layer2_neuron1(input_to_layer2_neuron1))
+        layer2_out2 = torch.sigmoid(self.layer2_neuron2(input_to_layer2_neuron2))
+
+        # Concatenate outputs to feed into the output layer
+        final_input_to_output_layer = torch.cat((layer2_out1, layer2_out2), dim=1)
+
+        # Forward pass through the output layer
+        output = torch.sigmoid(self.output_layer(final_input_to_output_layer))
+        return output
 
 
 # example usage
 if __name__ == '__main__':
-    # HYPERPARAMETERS
-    INIITIAL_LEARNING_RATE  = 0.001  # Starting learning rate
-    MAXIMUM_LEARNING_RATE = 0.5   # Maximum learning rate
-    EPOCHS = 30000
-    ALPHA = 0.5
-    LAMBDA_MAGNITUDE = 0.1
-    LAMBDA_POLARITY = 0.01
-    LAMBDA_INTEGERS = 0.001
-    LAMBDA_SPARSITY = 1
+    # # HYPERPARAMETERS
+    # INIITIAL_LEARNING_RATE  = 0.001  # Starting learning rate
+    # MAXIMUM_LEARNING_RATE = 0.5   # Maximum learning rate
+    # EPOCHS = 30000
+    # ALPHA = 0.5
+    # LAMBDA_MAGNITUDE = 0.1
+    # LAMBDA_POLARITY = 0.01
+    # LAMBDA_INTEGERS = 0.001
+    # LAMBDA_SPARSITY = 0.01
 
     # # dataset
     # X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
@@ -534,12 +615,23 @@ if __name__ == '__main__':
     #                                 initial_lr=INIITIAL_LEARNING_RATE,
     #                                 max_lr=MAXIMUM_LEARNING_RATE)
     
+    # HYPERPARAMETERS
+    INIITIAL_LEARNING_RATE  = 0.001  # Starting learning rate
+    MAXIMUM_LEARNING_RATE = 0.5   # Maximum learning rate
+    EPOCHS = 30000
+    ALPHA = 0.5
+    LAMBDA_MAGNITUDE = 0.1
+    LAMBDA_POLARITY = 0.1
+    LAMBDA_INTEGERS = 0.001
+    LAMBDA_SPARSITY = 0.01
+
     X_train, y_train, X_test, y_test = create_torch_XOR_XNOR_dataset()
 
-    model_XOR_AND_XNOR = ThreeLayerMLP().double()
+    model_XOR_AND_XNOR = SparseThreeLayerMLP().double()
+
     # define the loss
     loss_function = torch.nn.BCELoss()
-    #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
+    #optimizer = torch.optim.SGD(model_XOR_AND_XNOR.parameters(), lr=INIITIAL_LEARNING_RATE)
     optimizer = torch.optim.Adam(model_XOR_AND_XNOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
 
     all_loss = train_with_rectified_L2(model_XOR_AND_XNOR, 
@@ -552,7 +644,7 @@ if __name__ == '__main__':
                                     LAMBDA_MAGNITUDE=LAMBDA_MAGNITUDE,
                                     LAMBDA_POLARITY=LAMBDA_POLARITY,
                                     LAMBDA_INTEGERS=LAMBDA_INTEGERS,
-                                    LAMBDA_SPARSITY=LAMBDA_SPARSITY,
+                                    LAMBDA_SPARSITY=None,
                                     initial_lr=INIITIAL_LEARNING_RATE,
                                     max_lr=MAXIMUM_LEARNING_RATE)
 
