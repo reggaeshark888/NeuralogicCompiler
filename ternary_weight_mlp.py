@@ -223,8 +223,18 @@ def calculate_integer_penalty(model, lambda_integer=0.05):
     return total_penalty
 
 def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
+    """
+    Calculates a regularization penalty which encourages the two largest weights (by magnitude) of each neuron
+    in the model's layers to have opposite signs from their corresponding bias.
+
+    Parameters:
+    - model (torch.nn.Module): The neural network model.
+    - LAMBDA_POLARITY (float, optional): Regularization coefficient. Default is 0.025.
+
+    Returns:
+    - total_penalty (float): The computed regularization penalty.
+    """
     total_penalty = 0
-    epsilon = 1e-8  # Small constant
     # iterate over all layers of the model
     for layer in model.children():
         if isinstance(layer, nn.Linear):
@@ -236,7 +246,7 @@ def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
                     #+ torch.sum(lambda_sign * torch.max(torch.zeros_like(weights), weights * torch.sign(bias).unsqueeze(1)))
             total_penalty += penalty
     
-    return total_penalty + epsilon
+    return total_penalty
 
 def calculate_integer_penalty2(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS=0.01):
     """
@@ -353,11 +363,41 @@ def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
     total_penalty = lambda_magnitude * regularization_loss
     return total_penalty
 
+def calculate_sparse_penalty(model, lambda_sparsity=0.01):
+    """
+    Calculates a regularization penalty which encourages sparsity by penalizing all but the two largest (by magnitude) 
+    weights of each neuron in the model's layers.
+
+    Parameters:
+    - model (torch.nn.Module): The neural network model.
+    - lambda_sparsity (float, optional): Regularization coefficient. Default is 0.01.
+
+    Returns:
+    - total_penalty (float): The computed regularization penalty.
+    """
+    regularization_loss = 0.0
+
+    for layer in model.children():
+        if hasattr(layer, 'weight'):  # Ensure the layer has weights
+            weights = layer.weight.data  # Use the weight data tensor
+            # Obtain the absolute values of weights and sort each row
+            sorted_weights, _ = torch.sort(torch.abs(weights), descending=True)
+            # Select all weights except the top two largest weights by magnitude for each neuron
+            remaining_weights = sorted_weights[:, 2:]  # Start from the third largest weight
+            # Calculate the squared sum of the remaining weights
+            penalty = torch.sum(remaining_weights ** 2, dim=1)
+            # Sum up the penalties for all neurons in the layer
+            regularization_loss += torch.sum(penalty)
+
+    total_penalty = lambda_sparsity * regularization_loss
+    return total_penalty
+
 def train_with_rectified_L2(model, loss_function, optimizer, x, y, 
                             no_of_epochs=90000, ALPHA=0.5,
                             LAMBDA_MAGNITUDE = 0.01,
                             LAMBDA_POLARITY = 0.01,
                             LAMBDA_INTEGERS = 0.01,
+                            LAMBDA_SPARSITY = None,
                             initial_lr=0.01,
                             max_lr=1):
     # store loss and penalization for each epoch
@@ -371,7 +411,6 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         # compute gradient G1 - loss
         loss = loss_function(y_hat, y)
         
-
         all_loss_without_reg.append(loss.item())
 
         # compute opposite sign penalty
@@ -381,15 +420,22 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         magnitude_penalty = calculate_weight_magnitude_penalty(model, LAMBDA_MAGNITUDE)
 
         # compute distance from integer numbers penalty
-        # integer_penalty = calculate_integer_penalty2(model_XOR)
-        # integer_penalty = calculate_integer_penalty(model_XOR)
         integer_penalty = calculate_integer_penalty2(model, LAMBDA_INTEGERS=LAMBDA_INTEGERS)
 
-        # total loss with regularization
-        if epoch > 1000:
-            total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty
+        if LAMBDA_SPARSITY is not None:
+            sparsity_penalty = calculate_sparse_penalty(model, lambda_sparsity=LAMBDA_SPARSITY)
+            # total loss with regularization
+            if epoch > 1000:
+                total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty + sparsity_penalty
+            else:
+                total_loss = loss + polarity_penalty + magnitude_penalty + sparsity_penalty
         else:
-            total_loss = loss + polarity_penalty + magnitude_penalty
+            # total loss with regularization
+            if epoch > 1000:
+                total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty
+            else:
+                total_loss = loss + polarity_penalty + magnitude_penalty
+
 
         if total_loss < 0.02:
             print("Optimal solution found")
@@ -462,18 +508,20 @@ if __name__ == '__main__':
     ALPHA = 0.5
     LAMBDA_MAGNITUDE = 0.1
     LAMBDA_POLARITY = 0.01
-    LAMBDA_INTEGERS = 0.005
+    LAMBDA_INTEGERS = 0.001
+    LAMBDA_SPARSITY = 1
 
+    # # dataset
+    # X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
 
-    # X_train, y_train, X_test, y_test = create_torch_XOR_XNOR_dataset()
-
-    # model_XOR_AND_XNOR = ThreeLayerMLP().double()
+    # model_XOR = TwoLayerMLP().double()
     # # define the loss
     # loss_function = torch.nn.BCELoss()
-    # #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
-    # optimizer = torch.optim.Adam(model_XOR_AND_XNOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
 
-    # all_loss = train_with_rectified_L2(model_XOR_AND_XNOR, 
+    # #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
+    # optimizer = torch.optim.Adam(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
+
+    # all_loss = train_with_rectified_L2(model_XOR, 
     #                                 loss_function, 
     #                                 optimizer, 
     #                                 X_train, 
@@ -485,17 +533,16 @@ if __name__ == '__main__':
     #                                 LAMBDA_INTEGERS=LAMBDA_INTEGERS,
     #                                 initial_lr=INIITIAL_LEARNING_RATE,
     #                                 max_lr=MAXIMUM_LEARNING_RATE)
+    
+    X_train, y_train, X_test, y_test = create_torch_XOR_XNOR_dataset()
 
-    # dataset
-    X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
-
-    model_XOR = TwoLayerMLP().double()
+    model_XOR_AND_XNOR = ThreeLayerMLP().double()
     # define the loss
     loss_function = torch.nn.BCELoss()
     #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
-    optimizer = torch.optim.Adam(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
+    optimizer = torch.optim.Adam(model_XOR_AND_XNOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
 
-    all_loss = train_with_rectified_L2(model_XOR, 
+    all_loss = train_with_rectified_L2(model_XOR_AND_XNOR, 
                                     loss_function, 
                                     optimizer, 
                                     X_train, 
@@ -505,6 +552,7 @@ if __name__ == '__main__':
                                     LAMBDA_MAGNITUDE=LAMBDA_MAGNITUDE,
                                     LAMBDA_POLARITY=LAMBDA_POLARITY,
                                     LAMBDA_INTEGERS=LAMBDA_INTEGERS,
+                                    LAMBDA_SPARSITY=LAMBDA_SPARSITY,
                                     initial_lr=INIITIAL_LEARNING_RATE,
                                     max_lr=MAXIMUM_LEARNING_RATE)
 
