@@ -1,4 +1,4 @@
-# Project Title
+# MLP Interpretability
 
 This repository contains various files and notebooks related to the development, training, and evaluation of MLP models with ternary weights, including an ILP algorithm for determining an integer set of weights, hyperparameter optimization, and logic expression weight generation.
 
