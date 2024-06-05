@@ -1,0 +1,202 @@
+[
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 0,
+            "NOR": 0
+        },
+        "percentage": 66.66666666666666,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 2
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 2
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 0,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 66.66666666666666,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 0,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 66.66666666666666,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 0,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 66.66666666666666,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 2
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 2
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 0,
+            "NAND": 1,
+            "NOR": 1
+        },
+        "percentage": 66.66666666666666,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 2
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    },
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 0,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 66.66666666666666,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 100.0,
+        "accuracy": 1.0
+    }
+]

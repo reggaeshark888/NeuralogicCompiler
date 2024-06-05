@@ -29,6 +29,7 @@ FALSE: 'false';
 AND : 'and' ;
 OR  : 'or' ;
 NAND : 'nand';
+NOR : 'nor';
 NOT : 'not';
 
 IDENTIFIER : [a-z];

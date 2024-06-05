@@ -2,6 +2,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 from torchviz import make_dot
 
 def print_network_parameters(network):
@@ -45,6 +46,49 @@ def graph_neural_network(network):
     graph = make_dot(params=dict(list(network.named_parameters())))
     graph.render('network_graph', format='png', cleanup=True)  # This saves and cleans up the dot file
 
+def evaluate_logic_gates_in_network(model, c):
+    results = {}
+    total_neurons = 0
+    gate_counts = {'AND': 0, 'OR': 0, 'NAND': 0, 'NOR': 0}
+    neurons_with_gates = 0
+
+    for layer in model.children():
+        if hasattr(layer, 'weight') and hasattr(layer, 'bias'):
+            weights = layer.weight.data
+            biases = layer.bias.data
+
+            for i in range(weights.shape[0]):  # Iterate over each neuron
+                w1, w2 = weights[i][:2].squeeze()  # Assume the first two elements are weights w1, w2
+                b = biases[i].item()
+
+                # Define the logic gate conditions
+                gates = {
+                    'AND': (b <= -c and (w2 + b) <= -c and (w1 + b) <= -c and (w1 + w2 + b) >= c),
+                    'OR': (b <= -c and (w2 + b) >= c and (w1 + b) >= c and (w1 + w2 + b) >= c),
+                    'NAND': (b >= c and (w2 + b) >= c and (w1 + b) >= c and (w1 + w2 + b) <= -c),
+                    'NOR': (b >= c and (w2 + b) <= -c and (w1 + b) <= -c and (w1 + w2 + b) <= -c)
+                }
+
+                # Update counts
+                gate_found = False
+                for key, value in gates.items():
+                    if value:
+                        gate_counts[key] += 1
+                        gate_found = True
+                if gate_found:
+                    neurons_with_gates += 1
+
+                total_neurons += 1
+
+    # Calculate percentage of neurons that represent any logic gate
+    gate_percentage = (neurons_with_gates / total_neurons * 100) if total_neurons > 0 else 0
+
+    # Include gate counts and percentage in the results
+    results['gate_counts'] = gate_counts
+    results['percentage'] = gate_percentage
+
+    return results
+
 def create_torch_XOR_dataset():
     """
     Generate a dataset for the XOR problem, suitable for training in PyTorch.
@@ -59,15 +103,7 @@ def create_torch_XOR_dataset():
     X_train : torch.Tensor
         The training set input features, shape (150, 2). Each row corresponds to an input pair.
     y_train : torch.Tensor
-        The training set labels, shape (150, 1). Each entry is the XOR result of the corresponding input pair.
-    X_test : torch.Tensor
-        The testing set input features, shape (50, 2). Each row corresponds to an input pair.
-    y_test : torch.Tensor
-        The testing set labels, shape (50, 1). Each entry is the XOR result of the corresponding input pair.
-
-    Notes
-    -----
-    The dataset initially consists of four points: (0,0), (0,1), (1,0), and (1,1), with corresponding
+        The training set labels, shape (150, 1). evaluate_logic_gates_in_network(model_XOR): (0,0), (0,1), (1,0), and (1,1), with corresponding
     XOR outputs: 0, 1, 1, and 0 respectively. Each point is repeated 50 times to increase the dataset size,
     then random noise up to 0.05 is added to the inputs. The entire dataset is shuffled to ensure
     randomness in training and testing splits. The final dataset is divided into 75% training and 25% testing.
@@ -87,8 +123,8 @@ def create_torch_XOR_dataset():
     y =  np.repeat(y,  50)
     
     # Add noise
-    x1 = x1 + np.random.rand(x1.shape[0])*0.05
-    x2 = x2 + np.random.rand(x2.shape[0])*0.05
+    # x1 = x1 + np.random.rand(x1.shape[0])*0.05
+    # x2 = x2 + np.random.rand(x2.shape[0])*0.05
 
     # Shuffle the data
     index_shuffle = np.arange(x1.shape[0])
@@ -113,6 +149,59 @@ def create_torch_XOR_dataset():
     X_test  = X[150:,:]
     y_train = y_torch[:150,:]
     y_test  = y_torch[150:,:]
+
+    return X_train, y_train, X_test, y_test
+
+def create_torch_A_XOR_B_AND_C_NAND_C_dataset():
+    """
+    Generate a dataset for the custom Boolean expression (A XOR B) AND (C NAND C), suitable for training in PyTorch.
+
+    This function creates a dataset representing the Boolean logic, extends it by repeating each data point 50 times, introduces slight random noise to the inputs,
+    and finally shuffles the dataset. The dataset is then split into training and testing subsets and converted to PyTorch tensors.
+
+    Returns
+    -------
+    X_train : torch.Tensor
+        The training set input features, shape (300, 3). Each row corresponds to an input trio.
+    y_train : torch.Tensor
+        The training set labels, shape (300, 1).
+    X_test : torch.Tensor
+        The testing set input features, shape (100, 3).
+    y_test : torch.Tensor
+        The testing set labels, shape (100, 1).
+    """
+    # Possible combinations for three input Boolean variables
+    A = np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=np.float64)
+    B = np.array([0, 0, 1, 1, 0, 0, 1, 1], dtype=np.float64)
+    C = np.array([0, 1, 0, 1, 0, 1, 0, 1], dtype=np.float64)
+
+    # Evaluate the Boolean expression (A XOR B) AND (C NAND C)
+    A_XOR_B = np.logical_xor(A, B)
+    C_NAND_C = np.logical_not(np.logical_and(C, C))  # Same as NOT C
+    y = np.logical_and(A_XOR_B, C_NAND_C).astype(np.float64)
+
+    # Repeat each combination to increase dataset size
+    A = np.repeat(A, 50)
+    B = np.repeat(B, 50)
+    C = np.repeat(C, 50)
+    y = np.repeat(y, 50)
+
+    # Shuffle the data
+    indices = np.arange(A.shape[0])
+    np.random.shuffle(indices)
+    A, B, C, y = A[indices], B[indices], C[indices], y[indices]
+
+    # Double the C column in the feature matrix
+    C_doubled = np.column_stack((C, C))
+
+    # Convert to PyTorch tensors
+    X = torch.tensor(np.column_stack((A, B, C_doubled)), dtype=torch.float64)
+    y = torch.tensor(y, dtype=torch.float64).unsqueeze(1)
+
+    # Split dataset into training and testing
+    split_point = int(0.75 * len(X))
+    X_train, X_test = X[:split_point], X[split_point:]
+    y_train, y_test = y[:split_point], y[split_point:]
 
     return X_train, y_train, X_test, y_test
 
@@ -208,37 +297,7 @@ def train(model, loss_function, optimizer, x, y, no_of_epochs):
 
     return all_loss
 
-def create_masks(param_tensor, threshold=0.5):
-    greater_than_threshold = param_tensor >= threshold
-    less_than_threshold = param_tensor <= -threshold
-    return greater_than_threshold, less_than_threshold
-
-def create_center_mask(param_tensor, threshold=1):
-    return (param_tensor > -threshold) & (param_tensor < threshold)
-
-def calculate_penalty(tensor, above_threshold, LAMBDA):
-    if above_threshold:
-        return (tensor - 10) * 2 * LAMBDA
-    else:
-        return (tensor + 15) * 2 * LAMBDA
-
-def calculate_central_penalty(tensor, LAMBDA):
-    return tensor * 2 * LAMBDA
-
-def calculate_integer_penalty(model, lambda_integer=0.05):
-    total_penalty = 0
-    for _, param in model.named_parameters():
-        # calculate the update based on the mask and update parameters
-        gt_penalty = calculate_penalty(param.data, True, lambda_integer)
-        ls_penalty = calculate_penalty(param.data, False, lambda_integer)
-
-        gt_mask, ls_mask = create_masks(param.data)
-
-        total_penalty += torch.sum(gt_penalty*gt_mask) + torch.sum(ls_penalty*ls_mask)
-
-    return total_penalty
-
-def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
+def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025, device="cpu"):
     """
     Calculates a regularization penalty which encourages the two largest weights (by magnitude) of each neuron
     in the model's layers to have opposite signs from their corresponding bias.
@@ -250,7 +309,7 @@ def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
     Returns:
     - total_penalty (float): The computed regularization penalty.
     """
-    total_penalty = 0
+    total_penalty = torch.tensor(0.0, device=device)
 
     for layer in model.children():
         if isinstance(layer, nn.Linear):  # Check for linear layers with weights and biases
@@ -273,7 +332,7 @@ def calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY=0.025):
 
     return LAMBDA_POLARITY * total_penalty
 
-def calculate_integer_penalty2(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS=0.01):
+def calculate_integer_penalty2(model, targets = [10, -10, -15, 15], LAMBDA_INTEGERS=0.01, device="cpu"):
     """
     Calculate a regularization penalty that encourages weights and biases of each neuron
     to converge towards specified target values under conditions that weights and biases
@@ -287,11 +346,12 @@ def calculate_integer_penalty2(model, targets = [10, -10, -15, 15], LAMBDA_INTEG
     Returns:
         torch.Tensor: The regularization penalty.
     """
-    total_penalty = 0.0
+    total_penalty = torch.tensor(0.0, device=device)
+    targets = [torch.tensor(target, device=device) for target in targets]
     for layer in model.children():
         if hasattr(layer, 'weight') and hasattr(layer, 'bias'):
-            weights = layer.weight
-            biases = layer.bias
+            weights = layer.weight.to(device)  # Ensure weights are on the correct device
+            biases = layer.bias.to(device)  # Ensure biases are on the correct device
 
             for i in range(weights.shape[0]):  # Iterate over each neuron
                 neuron_weights = weights[i]
@@ -357,7 +417,7 @@ def calculate_integer_penalty3(model, targets = [10, -10, -15, 15], LAMBDA_INTEG
     
     return LAMBDA_INTEGERS * total_penalty
 
-def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
+def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01, device="cpu"):
     """
     Calculates a regularization penalty which encourages the two largest (by magnitude) weights
     of each neuron in the model's layers to have similar magnitudes.
@@ -369,11 +429,11 @@ def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
     Returns:
     - total_penalty (float): The computed regularization penalty.
     """
-    regularization_loss = 0.0
+    regularization_loss = torch.tensor(0.0, device=device)
 
     for layer in model.children():
         if hasattr(layer, 'weight'):  # Ensure the layer has weights
-            weights = layer.weight.data  # Use the weight data tensor
+            weights = layer.weight.to(device)  # Use the weight data tensor
             # Obtain the absolute values of weights and sort each row
             sorted_weights, _ = torch.sort(torch.abs(weights), descending=True)
             # Select the top two largest weights by magnitude for each neuron
@@ -388,7 +448,7 @@ def calculate_weight_magnitude_penalty(model, lambda_magnitude = 0.01):
     total_penalty = lambda_magnitude * regularization_loss
     return total_penalty
 
-def calculate_sparse_penalty(model, lambda_sparsity=0.01):
+def calculate_sparse_penalty(model, lambda_sparsity=0.01, device="cpu"):
     """
     Calculates a regularization penalty which encourages sparsity by penalizing all but the two largest (by magnitude) 
     weights of each neuron in the model's layers.
@@ -400,7 +460,7 @@ def calculate_sparse_penalty(model, lambda_sparsity=0.01):
     Returns:
     - total_penalty (float): The computed regularization penalty.
     """
-    regularization_loss = 0.0
+    regularization_loss = torch.tensor(0.0, device=device)
 
     for layer in model.children():
         if hasattr(layer, 'weight'):  # Ensure the layer has weights
@@ -432,7 +492,7 @@ def enforce_two_nonzero_weights(model):
                 abs_weights = torch.abs(weights)
                 top_two_weights, _ = torch.topk(abs_weights, 2, dim=1)
                 min_top_two = top_two_weights[:, -1].unsqueeze(1)
-                layer.weight.data *= (abs_weights >= min_top_two).float()
+                layer.weight.data *= (abs_weights >= min_top_two).double()
 
 def train_with_rectified_L2(model, loss_function, optimizer, x, y, 
                             no_of_epochs=90000, ALPHA=0.5,
@@ -441,10 +501,23 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
                             LAMBDA_INTEGERS = 0.01,
                             LAMBDA_SPARSITY = None,
                             initial_lr=0.01,
-                            max_lr=1):
+                            max_lr=1,
+                            print_params=False):
+    
+    # Check if GPU is available and use it
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model.to(device)
+    # x, y = x.to(device), y.to(device)
+    device = torch.device("cpu")
+
     # store loss and penalization for each epoch
     all_loss_without_reg = []
     all_loss_with_reg = []
+
+    # Initialize variables to detect increasing loss
+    previous_loss = float('inf')
+    increase_counter = 0
+    toggle_integer_penalty = False
 
     for epoch in range(no_of_epochs):
         # forward pass
@@ -452,34 +525,52 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
 
         # compute gradient G1 - loss
         loss = loss_function(y_hat, y)
+
+        # # Detect if loss starts to increase
+        if loss.item() > previous_loss:
+            increase_counter += 1
+        else:
+            increase_counter = 0
+
+        previous_loss = loss.item()
+
+        # Turn off integer_penalty for 1000 epochs if loss increases
+        if increase_counter >= 1:
+            toggle_integer_penalty = True
+        if toggle_integer_penalty and increase_counter >= 1000:
+            toggle_integer_penalty = False
+            increase_counter = 0
         
         all_loss_without_reg.append(loss.item())
 
         # compute opposite sign penalty
-        polarity_penalty = calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY)
+        polarity_penalty = calculate_total_opposite_sign_penalty(model, LAMBDA_POLARITY, device=device)
 
         # compute same weight magnitude penalty
-        magnitude_penalty = calculate_weight_magnitude_penalty(model, LAMBDA_MAGNITUDE)
+        magnitude_penalty = calculate_weight_magnitude_penalty(model, LAMBDA_MAGNITUDE, device=device)
 
         # compute distance from integer numbers penalty
-        integer_penalty = calculate_integer_penalty2(model, LAMBDA_INTEGERS=LAMBDA_INTEGERS)
+        if not toggle_integer_penalty:
+            integer_penalty = calculate_integer_penalty2(model, LAMBDA_INTEGERS=LAMBDA_INTEGERS, device=device)
+        else:
+            integer_penalty = 0
 
         if LAMBDA_SPARSITY is not None:
             sparsity_penalty = calculate_sparse_penalty(model, lambda_sparsity=LAMBDA_SPARSITY)
             # total loss with regularization
-            if epoch > 1000:
-                total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty + sparsity_penalty
+            if epoch > 10000:
+                enforce_two_nonzero_weights(model)
+                total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty # + sparsity_penalty
             else:
-                total_loss = loss + polarity_penalty + magnitude_penalty + sparsity_penalty
+                total_loss = loss + polarity_penalty + magnitude_penalty # + sparsity_penalty
         else:
             # total loss with regularization
-            if epoch > 1000:
+            if epoch > 10000:
                 total_loss = loss + polarity_penalty + magnitude_penalty + integer_penalty
             else:
                 total_loss = loss + polarity_penalty + magnitude_penalty
 
-
-        if total_loss < 0.02:
+        if total_loss < 0.01:
             print("Optimal solution found")
             return
 
@@ -496,13 +587,14 @@ def train_with_rectified_L2(model, loss_function, optimizer, x, y,
         # takes a step in the parameter step opposite to the gradient, peforms the update rule
         optimizer.step()
 
-        print("epoch", epoch)
-        print("loss without reg", all_loss_without_reg[epoch])
-        print("loss with reg", all_loss_with_reg[epoch])
-        #print("learning rate", lr)
-        print_network_parameters_for_neurons(model)
+        if print_params:
+            print("epoch", epoch)
+            print("loss without reg", all_loss_without_reg[epoch])
+            print("loss with reg", all_loss_with_reg[epoch])
+            #print("learning rate", lr)
+            print_network_parameters_for_neurons(model)
 
-        z = 0
+        z = 0 
 
     return all_loss_without_reg, all_loss_with_reg
         
@@ -552,6 +644,28 @@ class SparseThreeLayerMLP(nn.Module):
 
         # Output layer remains a simple linear layer from the second layer
         self.output_layer = nn.Linear(2, 1)
+
+        # Initialize weights using Xavier initialization
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        # Apply Xavier initialization to each layer
+        init.xavier_uniform_(self.layer1_neuron1.weight)
+        init.xavier_uniform_(self.layer1_neuron2.weight)
+        init.xavier_uniform_(self.layer1_neuron3.weight)
+        init.xavier_uniform_(self.layer1_neuron4.weight)
+        init.xavier_uniform_(self.layer2_neuron1.weight)
+        init.xavier_uniform_(self.layer2_neuron2.weight)
+        init.xavier_uniform_(self.output_layer.weight)
+
+        # Initialize biases to zero (or you can choose another initialization method)
+        nn.init.zeros_(self.layer1_neuron1.bias)
+        nn.init.zeros_(self.layer1_neuron2.bias)
+        nn.init.zeros_(self.layer1_neuron3.bias)
+        nn.init.zeros_(self.layer1_neuron4.bias)
+        nn.init.zeros_(self.layer2_neuron1.bias)
+        nn.init.zeros_(self.layer2_neuron2.bias)
+        nn.init.zeros_(self.output_layer.bias)
     
     def forward(self, x):
         # Split input into two parts for distinct processing
@@ -579,6 +693,34 @@ class SparseThreeLayerMLP(nn.Module):
         output = torch.sigmoid(self.output_layer(final_input_to_output_layer))
         return output
 
+class SparseThreeLayerMLP2(nn.Module):
+    def __init__(self):
+        super(SparseThreeLayerMLP2, self).__init__()
+        # First layer: Four neurons handling specific input pairs
+        self.layer1_neuron1 = nn.Linear(2, 1)  # Connects to the first two inputs
+        self.layer1_neuron2 = nn.Linear(2, 1)  # Connects to the first two inputs again
+        self.layer1_neuron3 = nn.Linear(2, 1)  # Connects to the last two inputs
+
+        # Second layer: One neuron, receives inputs from layer1_neuron1 and layer1_neuron2
+        self.layer2_neuron1 = nn.Linear(2, 1)  # Combines outputs from layer1_neuron1 and layer1_neuron2
+
+        # Third layer (output layer): One neuron, receives inputs from layer1_neuron3 and layer2_neuron1
+        self.output_layer = nn.Linear(2, 1)
+
+    def forward(self, x):
+        # Process inputs through the first layer
+        out1_1 = torch.sigmoid(self.layer1_neuron1(x[:, 0:2]))  # Process first two inputs
+        out1_2 = torch.sigmoid(self.layer1_neuron2(x[:, 0:2]))  # Process first two inputs again
+        out1_3 = torch.sigmoid(self.layer1_neuron3(x[:, 2:4]))  # Process last two inputs
+
+        # Prepare inputs for the second layer
+        out2_input = torch.cat((out1_1, out1_2), dim=1)
+        out2_1 = torch.sigmoid(self.layer2_neuron1(out2_input))
+
+        # Output layer takes the combined outputs from the layer1_neuron3 and layer2_neuron1
+        output_input = torch.cat((out1_3, out2_1), dim=1)
+        output = torch.sigmoid(self.output_layer(output_input))
+        return output
 
 # example usage
 if __name__ == '__main__':
@@ -588,21 +730,24 @@ if __name__ == '__main__':
     # EPOCHS = 30000
     # ALPHA = 0.5
     # LAMBDA_MAGNITUDE = 0.1
-    # LAMBDA_POLARITY = 0.01
+    # LAMBDA_POLARITY = 0.1
     # LAMBDA_INTEGERS = 0.001
     # LAMBDA_SPARSITY = 0.01
 
     # # dataset
-    # X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
+    # #X_train, y_train, X_test, y_test = create_torch_XOR_dataset()
+    # X_train, y_train, X_test, y_test = create_torch_A_XOR_B_AND_C_NAND_C_dataset()
 
-    # model_XOR = TwoLayerMLP().double()
+    # # model_XOR = model_XOR.double()
+    # model_3layer = SparseThreeLayerMLP2().double()
+
     # # define the loss
     # loss_function = torch.nn.BCELoss()
 
     # #optimizer = torch.optim.SGD(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE)
-    # optimizer = torch.optim.Adam(model_XOR.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
+    # optimizer = torch.optim.Adam(model_3layer.parameters(), lr=INIITIAL_LEARNING_RATE, eps=1e-7)
 
-    # all_loss = train_with_rectified_L2(model_XOR, 
+    # all_loss = train_with_rectified_L2(model_3layer, 
     #                                 loss_function, 
     #                                 optimizer, 
     #                                 X_train, 
@@ -613,12 +758,16 @@ if __name__ == '__main__':
     #                                 LAMBDA_POLARITY=LAMBDA_POLARITY,
     #                                 LAMBDA_INTEGERS=LAMBDA_INTEGERS,
     #                                 initial_lr=INIITIAL_LEARNING_RATE,
-    #                                 max_lr=MAXIMUM_LEARNING_RATE)
+    #                                 max_lr=MAXIMUM_LEARNING_RATE,
+    #                                 print_params=True
+    #                                 )
     
+    # evaluate_logic_gates_in_network(model_3layer, 2)
+
     # HYPERPARAMETERS
-    INIITIAL_LEARNING_RATE  = 0.001  # Starting learning rate
+    INIITIAL_LEARNING_RATE  = 0.005  # Starting learning rate
     MAXIMUM_LEARNING_RATE = 0.5   # Maximum learning rate
-    EPOCHS = 30000
+    EPOCHS = 80000
     ALPHA = 0.5
     LAMBDA_MAGNITUDE = 0.1
     LAMBDA_POLARITY = 0.1
@@ -627,7 +776,8 @@ if __name__ == '__main__':
 
     X_train, y_train, X_test, y_test = create_torch_XOR_XNOR_dataset()
 
-    model_XOR_AND_XNOR = SparseThreeLayerMLP().double()
+    # model_XOR_AND_XNOR = SparseThreeLayerMLP().double()
+    model_XOR_AND_XNOR = ThreeLayerMLP().double()
 
     # define the loss
     loss_function = torch.nn.BCELoss()
@@ -640,12 +790,12 @@ if __name__ == '__main__':
                                     X_train, 
                                     y_train,
                                     no_of_epochs=EPOCHS,
-                                    ALPHA=ALPHA,
                                     LAMBDA_MAGNITUDE=LAMBDA_MAGNITUDE,
                                     LAMBDA_POLARITY=LAMBDA_POLARITY,
                                     LAMBDA_INTEGERS=LAMBDA_INTEGERS,
-                                    LAMBDA_SPARSITY=None,
+                                    LAMBDA_SPARSITY=0.01,
                                     initial_lr=INIITIAL_LEARNING_RATE,
-                                    max_lr=MAXIMUM_LEARNING_RATE)
+                                    max_lr=MAXIMUM_LEARNING_RATE,
+                                    print_params=True)
 
 

@@ -20,20 +20,26 @@ class MyVisitor(LogicVisitor):
         if ctx.binary().getText() == "and":
             if ctx.depth() not in self.weight_matrices:
                 self.weight_matrices[ctx.depth()] = []
-                self.weight_matrices[ctx.depth()].append([1, 1, -1.5])
+                self.weight_matrices[ctx.depth()].append([10, 10, -15])
             else:
-                self.weight_matrices[ctx.depth()].append([1, 1, -1.5])
+                self.weight_matrices[ctx.depth()].append([10, 10, -15])
         if ctx.binary().getText() == "nand":
             if ctx.depth() not in self.weight_matrices:
                 self.weight_matrices[ctx.depth()] = []
-                self.weight_matrices[ctx.depth()].append([-1, -1, 1.5])
+                self.weight_matrices[ctx.depth()].append([-10, -10, 15])
             else:
-                self.weight_matrices[ctx.depth()].append([-1, -1, 1.5])
+                self.weight_matrices[ctx.depth()].append([-10, -10, 15])
         if ctx.binary().getText() == "or":
             if ctx.depth() not in self.weight_matrices:
                 self.weight_matrices[ctx.depth()] = []
-                self.weight_matrices[ctx.depth()].append([1, 1, -0.5])
+                self.weight_matrices[ctx.depth()].append([15, 15, -10])
             else:
-                self.weight_matrices[ctx.depth()].append([1, 1, -0.5])
+                self.weight_matrices[ctx.depth()].append([15, 15, -10])
+        if ctx.binary().getText() == "nor":
+            if ctx.depth() not in self.weight_matrices:
+                self.weight_matrices[ctx.depth()] = []
+                self.weight_matrices[ctx.depth()].append([-15, -15, 10])
+            else:
+                self.weight_matrices[ctx.depth()].append([-15, -15, 10])
 
         return self.visitChildren(ctx)

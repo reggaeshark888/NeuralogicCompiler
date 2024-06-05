@@ -1,0 +1,162 @@
+[
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 1,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 60.0,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 2,
+            "OR": 0,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 60.0,
+        "accuracy": 0.875
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 60.0,
+        "accuracy": 0.5
+    },
+    {
+        "gate_counts": {
+            "AND": 3,
+            "OR": 0,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 57.14285714285714,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 28.57142857142857,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 2,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 0
+        },
+        "percentage": 28.57142857142857,
+        "accuracy": 0.625
+    },
+    {
+        "gate_counts": {
+            "AND": 0,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 0
+        },
+        "percentage": 0.0,
+        "accuracy": 0.0
+    },
+    {
+        "gate_counts": {
+            "AND": 2,
+            "OR": 1,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 71.42857142857143,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 1
+        },
+        "percentage": 28.57142857142857,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 3,
+            "OR": 0,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 57.14285714285714,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 2,
+            "OR": 0,
+            "NAND": 0,
+            "NOR": 1
+        },
+        "percentage": 42.857142857142854,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 57.14285714285714,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 57.14285714285714,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 3,
+            "OR": 0,
+            "NAND": 1,
+            "NOR": 0
+        },
+        "percentage": 57.14285714285714,
+        "accuracy": 0.25
+    },
+    {
+        "gate_counts": {
+            "AND": 1,
+            "OR": 1,
+            "NAND": 2,
+            "NOR": 0
+        },
+        "percentage": 57.14285714285714,
+        "accuracy": 0.625
+    },
+    {
+        "gate_counts": {
+            "AND": 2,
+            "OR": 1,
+            "NAND": 0,
+            "NOR": 0
+        },
+        "percentage": 42.857142857142854,
+        "accuracy": 0.625
+    }
+]

@@ -6,3 +6,4 @@ torchviz
 matplotlib
 networkx
 mlflow
+schemdraw
